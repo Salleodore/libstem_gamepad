@@ -331,6 +331,17 @@ DEFINE_GUID(IID_X360WirelessGamepad, MAKELONG(0x045E, 0x028E),0x0000,0x0000,0x00
 static PRAWINPUTDEVICELIST rawDevList = NULL;
 static UINT rawDevListCount = 0;
 
+void clearRawDevList()
+{
+	// HACK from us
+	if( rawDevList )
+	{
+		free(rawDevList);
+		rawDevList = NULL;
+		rawDevListCount = 0;
+	}
+}
+
 static bool isXInputDevice(const GUID * pGuidProductFromDirectInput) {
 	static const GUID * s_XInputProductGUID[] = {
 		&IID_ValveStreamingGamepad,
@@ -340,6 +351,11 @@ static bool isXInputDevice(const GUID * pGuidProductFromDirectInput) {
 	
 	size_t iDevice;
 	UINT i;
+	bool condition0;
+	bool condition1;
+	bool condition2;
+	bool condition3;
+	bool condition4;
 	
 	// Check for well known XInput device GUIDs
 	// This lets us skip RAWINPUT for popular devices. Also, we need to do this for the Valve Streaming Gamepad because it's virtualized and doesn't show up in the device list.
@@ -349,6 +365,7 @@ static bool isXInputDevice(const GUID * pGuidProductFromDirectInput) {
 		}
 	}
 	
+
 	// Go through RAWINPUT (WinXP and later) to find HID devices.
 	// Cache this if we end up using it.
 	if (rawDevList == NULL) {
@@ -372,11 +389,18 @@ static bool isXInputDevice(const GUID * pGuidProductFromDirectInput) {
 		UINT nameSize = sizeof(devName);
 		
 		rdi.cbSize = sizeof(rdi);
-		if (rawDevList[i].dwType == RIM_TYPEHID &&
-		    GetRawInputDeviceInfoA(rawDevList[i].hDevice, RIDI_DEVICEINFO, &rdi, &rdiSize) != (UINT) -1 &&
-		    MAKELONG(rdi.hid.dwVendorId, rdi.hid.dwProductId) == (LONG) pGuidProductFromDirectInput->Data1 &&
-		    GetRawInputDeviceInfoA(rawDevList[i].hDevice, RIDI_DEVICENAME, devName, &nameSize) != (UINT) -1 &&
-		    strstr(devName, "IG_") != NULL) {
+
+		condition0 = rawDevList[i].dwType == RIM_TYPEHID;
+		condition1 = GetRawInputDeviceInfoA(rawDevList[i].hDevice, RIDI_DEVICEINFO, &rdi, &rdiSize) != (UINT) -1;
+		condition2 = MAKELONG(rdi.hid.dwVendorId, rdi.hid.dwProductId) == (LONG) pGuidProductFromDirectInput->Data1;
+		condition3 = GetRawInputDeviceInfoA(rawDevList[i].hDevice, RIDI_DEVICENAME, devName, &nameSize) != (UINT) -1;
+		condition4 = strstr(devName, "IG_") != NULL;
+
+		if (condition0 &&
+		    condition1 &&
+		    condition2 &&
+		    condition3 &&
+		    condition4) {
 			return true;
 		}
 	}
@@ -759,6 +783,9 @@ static void removeDevice(unsigned int deviceIndex) {
 	for (; deviceIndex < numDevices; deviceIndex++) {
 		devices[deviceIndex] = devices[deviceIndex + 1];
 	}
+
+	// #Added by DAN
+	clearRawDevList();
 }
 
 void Gamepad_detectDevices() {
@@ -964,7 +991,7 @@ void Gamepad_processEvents() {
 					IDirectInputDevice8_Acquire(devicePrivate->deviceInterface);
 					result = IDirectInputDevice8_GetDeviceData(devicePrivate->deviceInterface, sizeof(DIDEVICEOBJECTDATA), events, &eventCount, 0);
 				}
-				if (SUCCEEDED(result)) {
+				if (result != DI_OK) {
 					removeDevice(deviceIndex);
 					deviceIndex--;
 					continue;
